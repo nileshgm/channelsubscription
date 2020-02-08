@@ -1,0 +1,167 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Select Product</title>
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<script src="js/jquery-1.12.3.min.js"></script>
+<script src="js/knockout-3.4.0.js"></script>
+
+<div class="container-fluid" id="productsContainer">
+    <div class="alert alert-danger" data-bind="visible: errorFound" style="display:none">
+        <h1>Error!</h1>
+        <div id="errorMessage" style="padding-top:20px"></div>
+    </div>
+    <div  data-bind="visible: showProducts" style="display:none">
+        <div class="page-header" >
+            <h1>Welcome <span data-bind="text: customerId"></span>!</h1>
+        </div>
+        <div class="row products-list">
+            <div class="col-md-8">
+                <div class="row" data-bind="foreach: products">
+                    <div class="col-md-6">
+                        <div class="panel panel-default">
+                            <div class="panel-heading">
+                                <h3 class="panel-title" data-bind="text: category"></h3>
+                            </div>
+                            <div class="panel-body" data-bind="foreach: $data.products">
+                                <div class="checkbox">
+                                    <label><input type="checkbox" data-bind="attr: {value: productId, desc: productName}"><span data-bind="text: productName" /></label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="panel panel-default">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">Basket</h3>
+                    </div>
+                    <div class="panel-body">
+                        <ul data-bind="foreach: selectedProducts">
+                            <li data-bind="text: productName"></li>
+                        </ul>
+                    </div>
+                    <div class="panel-footer">
+                        <input id="btnCheckout" type="button" class="btn btn-block btn-primary" value="Checkout" data-bind="enable: checkoutEnabled" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div data-bind="visible: showConfirmation" style="display:none">
+        <div class="page-header" >
+            <h1>Confirmation </h1>
+            </br>
+            <h4>Customer : <small><span data-bind="text: customerId"></span></small></h4>
+            <h4>Location : <small><span data-bind="text: locationId"></span></small></h4>
+            <h4>Products selected:</h4>
+            <div class="panel-body" >
+                <ul data-bind="foreach: selectedProducts">
+                    <li data-bind="text: productName"></li>
+                </ul>
+            </div>
+            <button type="button" class="btn btn-success">Submit</button>
+            <a data-bind="attr: { href: returnUrl }">Start again</a>
+        </div>
+    </div>
+</div>
+<script>
+    $(document).ready(function () {
+
+        var Product = function(){
+            productId = null;
+            productName = null;
+        }
+        var ProductSelectionViewModel = function()
+        {
+            var self = this;
+            self.customerId = ko.observable(null);
+            self.locationId = ko.observable(null);
+            self.products  =  ko.observableArray(null);
+            self.selectedProducts =  ko.observableArray();
+            self.checkoutEnabled = ko.observable(false);
+            self.errorFound = ko.observable(false);
+
+            self.showProducts = ko.observable(false);
+            self.showConfirmation = ko.observable(false);
+            self.returnUrl = ko.computed(function(){
+                return 'ProductSelection.html?customerId=' + self.customerId();
+            });
+        }
+        var viewModel = new ProductSelectionViewModel();
+        var customerId = getParameterByName("customerId");
+        viewModel.customerId(customerId);
+
+        if(viewModel.customerId() !=null ){
+            $.ajax({
+                type: "GET",
+                url: "/customerLocationService?customerId=" + viewModel.customerId(),
+                contentType: "application/json; charset=utf-8",
+                success: function(locationResult){
+                    viewModel.locationId(locationResult);
+                    $.ajax({
+                        type: "GET",
+                        url: "/productCatalogueService?locationId=" + viewModel.locationId(),
+                        contentType: "application/json; charset=utf-8",
+                        dataType: "json",
+                        success: function(result){
+                            viewModel.products(result);
+                            viewModel.showProducts((result.length > 0 ));
+                            bindControls();
+                        }
+                    });
+                },
+                error: function(errorResult){
+                    var err = jQuery.parseJSON(errorResult.responseText);
+                    $("#errorMessage").text(err.message);
+                    viewModel.errorFound(true);
+                    viewModel.showProducts(false);
+                    viewModel.showConfirmation(false);
+                    bindControls();
+                }
+            });
+        }
+
+        function bindControls(){
+            ko.applyBindings(viewModel);
+
+            $("div.products-list input[type='checkbox']").on("change",  function () {
+                viewModel.selectedProducts.removeAll();
+                $('div.products-list input[type="checkbox"]:checked').each(function () {
+                    var product = new Product();
+                    product.productId = $(this).attr('value');
+                    product.productName = $(this).attr('desc');
+
+                   viewModel.selectedProducts.push(product)
+                });
+                viewModel.checkoutEnabled(viewModel.selectedProducts().length > 0)
+            });
+
+            $("#btnCheckout").on("click", function () {
+                viewModel.showProducts(false);
+                viewModel.showConfirmation(true);
+            });
+        }
+
+        function getParameterByName( name ){
+            var regexS = "[\\?&]"+name+"=([^&#]*)",
+                    regex = new RegExp( regexS ),
+                    results = regex.exec( window.location.search );
+            if( results == null ){
+                return "";
+            } else{
+                return decodeURIComponent(results[1].replace(/\+/g, " "));
+            }
+        }
+
+    });
+</script>
+</body>
+</html>
